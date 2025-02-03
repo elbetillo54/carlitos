@@ -13,7 +13,7 @@ function App() {
     
     <FirebaseContext.Provider value={{ firebase }}>
       <div>
-        <Services />
+        <UserPage />
       </div>
     </FirebaseContext.Provider>
     

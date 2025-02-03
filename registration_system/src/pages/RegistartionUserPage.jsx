@@ -1,13 +1,16 @@
 import { Formik, Field, Form } from 'formik';
 import * as Yup from 'yup';
 import firebase from '../firebase';
+import { useState } from 'react';
+import axios from 'axios';
 
 const RegistartionUserPage = () => {
+    const [imageUrl, setImageUrl] = useState(null);
 
     const validationSchema = Yup.object({
         nombre: Yup.string().required('El nombre es obligatorio'),
         apellido: Yup.string().required('El apellido es obligatorio'),
-        edad: Yup.number().required('La edad es obligatoria').positive('Debe der un numero positivo').integer('Debe de ser un numero entero'),
+        edad: Yup.number().required('La edad es obligatoria').positive('Debe ser un número positivo').integer('Debe ser un número entero'),
         telefono: Yup.string().required('El teléfono es obligatorio'),
         direccion: Yup.string().required('La dirección es obligatoria'),
         dependientes: Yup.number().required('El número de dependientes es obligatorio').positive().integer(),
@@ -15,9 +18,9 @@ const RegistartionUserPage = () => {
         genero: Yup.string().required('El género es obligatorio'),
         estadoCivil: Yup.string().required('El estado civil es obligatorio'),
         identificacion: Yup.string().required('El número de identificación es obligatorio'),
+        imagen: Yup.mixed().required('La imagen es obligatoria'),
     });
 
-    // Valores iniciales para el formulario
     const initialValues = {
         nombre: '',
         apellido: '',
@@ -29,18 +32,72 @@ const RegistartionUserPage = () => {
         estadoCivil: 'soltero',
         dependientes: '',
         tiempoCalle: '',
+        imagen: null,
+    };
+
+    const uploadImageToImgBB = async (file) => {
+        const formData = new FormData();
+        formData.append('image', file);
+
+        try {
+            const response = await axios.post('https://api.imgbb.com/1/upload', formData, {
+                params: {
+                    key: '39b7962cab3be3ea95d9a65b2f43aed5', // Reemplaza con tu API key de ImgBB
+                },
+            });
+
+            if (response.data && response.data.data) {
+                return response.data.data.url; // Retorna la URL de la imagen subida
+            }
+        } catch (error) {
+            console.error('Error al subir la imagen a ImgBB:', error);
+            throw error;
+        }
     };
 
     const handleSubmit = async (values, { resetForm }) => {
-        try {
-            const db = firebase.db;
-            await db.collection("beneficiarios").add(values);
-            alert("Beneficiario registrado correctamente");
-            resetForm();
-        } catch (error) {
-            console.error("Error al guardar el beneficiario:", error);
-            alert("Hubo un error al registrar el beneficiario.");
-        }
+    try {
+        // Subir la imagen a ImgBB
+        const imageUrl = await uploadImageToImgBB(values.imagen);
+
+        // Crear el objeto de datos sin el campo "imagen" (que es un File)
+        const beneficiarioData = {
+            nombre: values.nombre,
+            apellido: values.apellido,
+            edad: values.edad,
+            genero: values.genero,
+            identificacion: values.identificacion,
+            telefono: values.telefono,
+            direccion: values.direccion,
+            estadoCivil: values.estadoCivil,
+            dependientes: values.dependientes,
+            tiempoCalle: values.tiempoCalle,
+            imagenUrl: imageUrl, // Solo guardamos la URL de la imagen
+        };
+
+        // Guardar los datos en Firestore
+        const db = firebase.db;
+        await db.collection("beneficiarios").add(beneficiarioData);
+
+        alert("Beneficiario registrado correctamente");
+        resetForm();
+        setImageUrl(null); // Limpiar la imagen después de guardar
+    } catch (error) {
+        console.error("Error al guardar el beneficiario:", error);
+        alert("Hubo un error al registrar el beneficiario.");
+    }
+};
+
+    const handleImageChange = (event, setFieldValue) => {
+        const file = event.currentTarget.files[0];
+        setFieldValue("imagen", file);
+
+        // Mostrar la imagen después de cargarla
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            setImageUrl(e.target.result);
+        };
+        reader.readAsDataURL(file);
     };
 
     return (
@@ -57,7 +114,7 @@ const RegistartionUserPage = () => {
                             validationSchema={validationSchema}
                             onSubmit={handleSubmit}
                         >
-                            {({ errors, touched }) => (
+                            {({ errors, touched, setFieldValue }) => (
                                 <Form>
                                     <legend className='text-center uppercase font-bold pt-2 text-3xl' >
                                         Registro Inicial
@@ -181,12 +238,12 @@ const RegistartionUserPage = () => {
 
                                         <div className='md:flex md:gap-6'>
                                             <div className='mt-6 w-full h-full gap-3'>
-                                                <label className='text-lg'>Dependinetes a Cargo</label>
+                                                <label className='text-lg'>Dependientes a Cargo</label>
                                                 <Field
                                                     className='w-full mt-2 rounded-md h-10 gap-3 p-2'
                                                     type='text'
                                                     name='dependientes'
-                                                    placeholder='Ingresa el numero de dependinetes a cargo'
+                                                    placeholder='Ingresa el numero de dependientes a cargo'
                                                 />
                                                 {errors.dependientes && touched.dependientes && (
                                                     <div className="text-red-500">{errors.dependientes}</div>
@@ -206,9 +263,25 @@ const RegistartionUserPage = () => {
                                             </div>
                                         </div>
 
+                                        <div className='mt-6 w-full h-full'>
+                                            <label className='text-lg'>Imagen</label>
+                                            <input
+                                                type="file"
+                                                onChange={(event) => handleImageChange(event, setFieldValue)}
+                                                className='w-full mt-2 rounded-md h-10 p-2'
+                                            />
+                                            {errors.imagen && touched.imagen && (
+                                                <div className="text-red-500">{errors.imagen}</div>
+                                            )}
+                                            {imageUrl && (
+                                                <div className="mt-4">
+                                                    <img src={imageUrl} alt="Preview" className="w-32 h-32 object-cover rounded-md" />
+                                                </div>
+                                            )}
+                                        </div>
+
                                         <div className='mt-6'>
                                             <button
-
                                                 type="submit"
                                                 className="w-full bg-blue-500 text-white p-3 rounded-md"
                                             >
@@ -224,8 +297,6 @@ const RegistartionUserPage = () => {
             </div>
         </div>
     );
-
-
-}
+};
 
 export default RegistartionUserPage;
